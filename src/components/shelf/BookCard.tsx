@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Book } from '../../types';
 import { CoverPlaceholder } from './CoverPlaceholder';
@@ -11,12 +12,29 @@ export interface BookCardProps {
 
 export function BookCard({ book, highlightCount }: BookCardProps) {
   const { coverUrl } = useCoverImage(book.coverId);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/floqt-book-id', book.id);
+    e.dataTransfer.setData('text/plain', book.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
 
   return (
     <Link
       to={`/books/${book.id}`}
-      className="group flex flex-col focus:outline-none animate-fade-in-up"
-      aria-label={`${book.title}${book.author ? ` por ${book.author}` : ''}, ${highlightCount} destaques`}
+      draggable={true}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      className={`group flex flex-col focus:outline-none animate-fade-in-up cursor-grab active:cursor-grabbing transition-opacity ${
+        isDragging ? 'opacity-40 scale-95' : 'opacity-100'
+      }`}
+      aria-label={`${book.title}${book.author ? ` por ${book.author}` : ''}, ${highlightCount} destaques (arraste para mover para uma pasta)`}
     >
       <div className="relative w-full aspect-2/3 rounded-md overflow-hidden shadow-cover group-hover:shadow-xl group-hover:-translate-y-1.5 group-hover:scale-[1.02] transition-all duration-300 ease-out bg-surface border border-border/50 group-hover:border-accent/30">
         {coverUrl ? (
@@ -24,7 +42,7 @@ export function BookCard({ book, highlightCount }: BookCardProps) {
             src={coverUrl}
             alt={`Capa de ${book.title}`}
             loading="lazy"
-            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105 pointer-events-none"
           />
         ) : (
           <CoverPlaceholder title={book.title} />

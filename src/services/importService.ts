@@ -86,6 +86,7 @@ export async function parseImportText(jsonText: string): Promise<ImportPreviewDa
   return {
     totalBooks: exportData.books.length,
     totalHighlights: incomingHighlights.length,
+    folders: exportData.folders || [],
     newBooks,
     newHighlights,
     conflicts,
@@ -210,6 +211,7 @@ export async function parseImportZip(file: File): Promise<ImportPreviewData> {
   return {
     totalBooks: exportData.books.length,
     totalHighlights: incomingHighlights.length,
+    folders: exportData.folders || [],
     newBooks,
     newHighlights,
     conflicts,
@@ -225,7 +227,24 @@ export async function executeImport(
   let highlightsImported = 0;
   let conflictsResolved = 0;
 
-  await db.transaction('rw', [db.books, db.highlights, db.coverImages], async () => {
+  await db.transaction('rw', [db.books, db.highlights, db.coverImages, db.folders], async () => {
+    // 0. Process incoming folders
+    if (previewData.folders && Array.isArray(previewData.folders)) {
+      for (const folder of previewData.folders) {
+        const existing = await db.folders.get(folder.id);
+        if (!existing) {
+          await db.folders.put({
+            id: folder.id,
+            name: folder.name,
+            parentId: folder.parentId || null,
+            color: folder.color || '#FFA94D',
+            createdAt: folder.createdAt || new Date().toISOString(),
+            updatedAt: folder.updatedAt || new Date().toISOString(),
+          });
+        }
+      }
+    }
+
     // 1. Process brand new books and covers
     for (const bookData of previewData.newBooks) {
       let coverId: string | null = null;
@@ -250,6 +269,7 @@ export async function executeImport(
         year: bookData.year || null,
         tags: bookData.tags || [],
         coverId,
+        folderId: bookData.folderId || null,
         createdAt: bookData.createdAt || new Date().toISOString(),
         updatedAt: bookData.updatedAt || new Date().toISOString(),
       };
@@ -303,6 +323,7 @@ export async function executeImport(
           year: conflict.incomingBook.year,
           tags: conflict.incomingBook.tags || [],
           coverId,
+          folderId: conflict.incomingBook.folderId !== undefined ? conflict.incomingBook.folderId : conflict.existingBook.folderId,
           updatedAt: new Date().toISOString(),
         };
 
@@ -340,6 +361,10 @@ export async function executeImport(
             originalSource: 'upload',
           });
           await db.books.update(conflict.existingBook.id, { coverId: newCoverId });
+        }
+
+        if (conflict.incomingBook.folderId && !conflict.existingBook.folderId) {
+          await db.books.update(conflict.existingBook.id, { folderId: conflict.incomingBook.folderId });
         }
 
         for (const incomingH of conflict.incomingHighlights) {

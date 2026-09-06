@@ -4,12 +4,15 @@ import { Button } from '../common/Button';
 import { TagInput } from '../common/TagInput';
 import { Highlight } from '../../types';
 import { createHighlight, updateHighlight } from '../../services/highlightService';
+import { useHighlightFolders } from '../../hooks/useFolders';
 import { useToastStore } from '../../store/useToastStore';
+import { Folder as FolderIcon } from 'lucide-react';
 
 export interface HighlightFormModalProps {
   isOpen: boolean;
   bookId: string;
   highlightToEdit?: Highlight | null;
+  defaultFolderId?: string | null;
   onClose: () => void;
   onSaved?: (highlight: Highlight) => void;
 }
@@ -18,16 +21,19 @@ export function HighlightFormModal({
   isOpen,
   bookId,
   highlightToEdit,
+  defaultFolderId = null,
   onClose,
   onSaved,
 }: HighlightFormModalProps) {
   const isEditing = Boolean(highlightToEdit);
   const { addToast } = useToastStore();
+  const { getFolderTree } = useHighlightFolders(bookId);
 
   const [text, setText] = useState('');
   const [page, setPage] = useState<string>('');
   const [comment, setComment] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [folderId, setFolderId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
@@ -37,14 +43,16 @@ export function HighlightFormModal({
       setPage(highlightToEdit.page ? highlightToEdit.page.toString() : '');
       setComment(highlightToEdit.comment || '');
       setTags(highlightToEdit.tags || []);
+      setFolderId(highlightToEdit.folderId || null);
     } else {
       setText('');
       setPage('');
       setComment('');
       setTags([]);
+      setFolderId(defaultFolderId);
     }
     setErrors({});
-  }, [highlightToEdit, isOpen]);
+  }, [highlightToEdit, defaultFolderId, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +88,7 @@ export function HighlightFormModal({
           page: pageNum,
           comment: comment || null,
           tags,
+          folderId,
         });
         addToast({
           type: 'success',
@@ -92,6 +101,7 @@ export function HighlightFormModal({
           page: pageNum,
           comment: comment || null,
           tags,
+          folderId,
         });
         addToast({
           type: 'success',
@@ -110,6 +120,8 @@ export function HighlightFormModal({
       setIsSaving(false);
     }
   };
+
+  const folderOptions = getFolderTree();
 
   return (
     <Modal
@@ -146,6 +158,29 @@ export function HighlightFormModal({
             <p className="text-xs text-destructive mt-1">{errors.text}</p>
           )}
         </div>
+
+        {/* Folder Selection */}
+        {folderOptions.length > 0 && (
+          <div>
+            <label htmlFor="highlight-folder" className="block text-xs font-semibold text-ink mb-1 flex items-center gap-1.5">
+              <FolderIcon className="w-3.5 h-3.5 text-accent" />
+              <span>Pasta do Destaque</span>
+            </label>
+            <select
+              id="highlight-folder"
+              value={folderId || ''}
+              onChange={(e) => setFolderId(e.target.value ? e.target.value : null)}
+              className="w-full bg-bg/50 border border-border rounded-lg px-3 py-2 text-xs text-ink outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors cursor-pointer"
+            >
+              <option value="">Raiz do Livro (Sem pasta)</option>
+              {folderOptions.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.depth > 0 ? `${'\u00A0\u00A0'.repeat(f.depth)}└─ ` : ''}{f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Page & Tags */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

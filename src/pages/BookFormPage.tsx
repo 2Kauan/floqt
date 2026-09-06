@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Upload, Camera, Sparkles, Trash2, Check, RefreshCw, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Upload, Camera, Sparkles, Trash2, Check, RefreshCw, AlertCircle, Folder as FolderIcon } from 'lucide-react';
 import { useBook, useBooks } from '../hooks/useBooks';
+import { useFolders } from '../hooks/useFolders';
 import { createBook, updateBook } from '../services/bookService';
 import { saveCoverImage, searchCoverByTitle, searchCoverByIsbn } from '../services/coverService';
 import { useCoverImage } from '../hooks/useCoverImage';
@@ -19,6 +20,7 @@ export function BookFormPage() {
   const { addToast } = useToastStore();
   const isOnline = useOnlineStatus();
   const { genres: existingGenres } = useBooks();
+  const { getFolderTree } = useFolders();
 
   const { book, isLoading: isLoadingBook } = useBook(id);
   const { coverUrl: existingCoverUrl } = useCoverImage(book?.coverId);
@@ -29,6 +31,7 @@ export function BookFormPage() {
   const [genre, setGenre] = useState('');
   const [year, setYear] = useState<string>('');
   const [tags, setTags] = useState<string[]>([]);
+  const [folderId, setFolderId] = useState<string | null>(null);
   const [isbn, setIsbn] = useState('');
 
   // Cover image states
@@ -64,6 +67,7 @@ export function BookFormPage() {
       setGenre(book.genre || '');
       setYear(book.year ? book.year.toString() : '');
       setTags(book.tags || []);
+      setFolderId(book.folderId || null);
     }
   }, [book]);
 
@@ -234,6 +238,7 @@ export function BookFormPage() {
           year: yearNum,
           tags,
           coverId: coverIdToSave,
+          folderId,
         });
         addToast({
           type: 'success',
@@ -248,6 +253,7 @@ export function BookFormPage() {
           year: yearNum,
           tags,
           coverId: coverIdToSave ?? null,
+          folderId,
         });
         addToast({
           type: 'success',
@@ -536,6 +542,27 @@ export function BookFormPage() {
                 <p className="text-xs text-destructive mt-1">{errors.year}</p>
               )}
             </div>
+          </div>
+
+          {/* Folder Selection */}
+          <div>
+            <label htmlFor="book-folder" className="block text-sm font-medium text-ink mb-1 flex items-center gap-1.5">
+              <FolderIcon className="w-4 h-4 text-accent" />
+              <span>Pasta / Organização</span>
+            </label>
+            <select
+              id="book-folder"
+              value={folderId || ''}
+              onChange={(e) => setFolderId(e.target.value ? e.target.value : null)}
+              className="w-full bg-bg/50 border border-border rounded-lg px-3.5 py-2.5 text-sm text-ink outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors cursor-pointer"
+            >
+              <option value="">Início da Estante (Sem pasta)</option>
+              {getFolderTree().map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.depth > 0 ? `${'\u00A0\u00A0'.repeat(f.depth)}└─ ` : ''}{f.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Tags */}

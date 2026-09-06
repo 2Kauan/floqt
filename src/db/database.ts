@@ -1,11 +1,12 @@
 import Dexie, { Table } from 'dexie';
-import { Book, Highlight, CoverImage, AppSettings } from '../types';
+import { Book, Highlight, CoverImage, AppSettings, Folder } from '../types';
 
 export class FloqtDatabase extends Dexie {
   books!: Table<Book, string>;
   highlights!: Table<Highlight, string>;
   coverImages!: Table<CoverImage, string>;
   settings!: Table<AppSettings, string>;
+  folders!: Table<Folder, string>;
 
   constructor() {
     super('marginaliaDB');
@@ -14,6 +15,13 @@ export class FloqtDatabase extends Dexie {
       highlights: 'id, bookId, createdAt, [bookId+createdAt], *tags',
       coverImages: 'id',
       settings: 'id',
+    });
+    this.version(2).stores({
+      books: 'id, title, author, folderId, createdAt, *tags',
+      highlights: 'id, bookId, folderId, createdAt, [bookId+createdAt], *tags',
+      coverImages: 'id',
+      settings: 'id',
+      folders: 'id, parentId, bookId, type, name, order, createdAt',
     });
   }
 }

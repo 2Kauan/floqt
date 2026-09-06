@@ -11,6 +11,7 @@ import {
   GripVertical,
   ChevronUp,
   ChevronDown,
+  FolderInput,
 } from 'lucide-react';
 
 export interface HighlightCardProps {
@@ -18,6 +19,7 @@ export interface HighlightCardProps {
   onExpand: (highlight: Highlight) => void;
   onEdit: (highlight: Highlight) => void;
   onDelete: (highlight: Highlight) => void;
+  onMoveFolder?: (highlight: Highlight) => void;
   isReorderMode?: boolean;
   index?: number;
   onMoveUp?: () => void;
@@ -36,6 +38,7 @@ export function HighlightCard({
   onExpand,
   onEdit,
   onDelete,
+  onMoveFolder,
   isReorderMode = false,
   index,
   onMoveUp,
@@ -49,13 +52,27 @@ export function HighlightCard({
   isDragging = false,
 }: HighlightCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isSelfDragging, setIsSelfDragging] = useState(false);
+
+  const handleSelfDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/floqt-highlight-id', highlight.id);
+    e.dataTransfer.setData('text/plain', highlight.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setIsSelfDragging(true);
+    onDragStart?.(e);
+  };
+
+  const handleSelfDragEnd = (e: React.DragEvent) => {
+    setIsSelfDragging(false);
+    onDragEnd?.(e);
+  };
 
   return (
     <article
-      draggable={isReorderMode}
-      onDragStart={onDragStart}
+      draggable={true}
+      onDragStart={handleSelfDragStart}
       onDragOver={onDragOver}
-      onDragEnd={onDragEnd}
+      onDragEnd={handleSelfDragEnd}
       onDrop={onDrop}
       onClick={() => {
         if (!isReorderMode) {
@@ -63,11 +80,11 @@ export function HighlightCard({
         }
       }}
       className={`group relative p-5 bg-surface border rounded-xl shadow-2xs transition-all duration-200 ease-out flex flex-col justify-between select-none ${
-        isDragging
+        isDragging || isSelfDragging
           ? 'opacity-40 scale-95 border-dashed border-accent bg-accent/5'
           : isReorderMode
           ? 'border-accent/40 hover:border-accent shadow-sm cursor-grab active:cursor-grabbing hover:bg-surface/90'
-          : 'border-border hover:shadow-md hover:-translate-y-0.5 hover:border-accent/40 cursor-pointer animate-fade-in-up'
+          : 'border-border hover:shadow-md hover:-translate-y-0.5 hover:border-accent/40 cursor-grab active:cursor-grabbing animate-fade-in-up'
       }`}
     >
       <div>
@@ -158,6 +175,19 @@ export function HighlightCard({
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>Editar</span>
                     </button>
+                    {onMoveFolder && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          onMoveFolder(highlight);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-ink hover:bg-bg transition-colors text-left cursor-pointer"
+                      >
+                        <FolderInput className="w-3.5 h-3.5 text-accent" />
+                        <span>Mover para pasta</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {

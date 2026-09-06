@@ -38,9 +38,9 @@ export function ConfirmModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} maxWidth="sm" showCloseButton={false}>
-      <div className="flex flex-col items-center text-center">
+      <div className="flex flex-col items-center text-center animate-spring-pop">
         {isDestructive && (
-          <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mb-4">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mb-4 animate-shake shadow-sm">
             <AlertTriangle className="w-6 h-6" />
           </div>
         )}

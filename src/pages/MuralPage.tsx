@@ -40,7 +40,7 @@ export function MuralPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'book'>('recent');
+  const [sortBy, setSortBy] = useState<'custom' | 'recent' | 'oldest' | 'book'>('custom');
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -119,12 +119,22 @@ export function MuralPage() {
       if (sortBy === 'oldest') {
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       }
+      if (sortBy === 'recent') {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
       if (sortBy === 'book') {
         const titleA = bookMap.get(a.bookId)?.title || '';
         const titleB = bookMap.get(b.bookId)?.title || '';
         return titleA.localeCompare(titleB, 'pt-BR');
       }
-      // Recent
+      // 'custom': Order by order field
+      const hasOrderA = typeof a.order === 'number';
+      const hasOrderB = typeof b.order === 'number';
+      if (hasOrderA && hasOrderB) {
+        return (a.order as number) - (b.order as number);
+      }
+      if (hasOrderA) return -1;
+      if (hasOrderB) return 1;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
@@ -193,6 +203,7 @@ export function MuralPage() {
       try {
         const ids = reorderedList.map((h) => h.id);
         await reorderHighlights(ids);
+        setSortBy('custom');
         addToast({
           type: 'success',
           message: 'Ordem do mural salva com sucesso!',
@@ -205,6 +216,7 @@ export function MuralPage() {
       }
       setIsReorderMode(false);
     } else {
+      setSortBy('custom');
       setReorderedList([...highlights]);
       setIsReorderMode(true);
       setSearchQuery('');
@@ -214,7 +226,13 @@ export function MuralPage() {
   };
 
   const moveHighlight = async (fromIdx: number, toIdx: number) => {
-    if (toIdx < 0 || toIdx >= reorderedList.length) return;
+    if (
+      fromIdx < 0 ||
+      toIdx < 0 ||
+      fromIdx >= reorderedList.length ||
+      toIdx >= reorderedList.length
+    )
+      return;
     const updated = [...reorderedList];
     const [moved] = updated.splice(fromIdx, 1);
     updated.splice(toIdx, 0, moved);
@@ -229,6 +247,7 @@ export function MuralPage() {
     e.dataTransfer.effectAllowed = 'move';
     try {
       e.dataTransfer.setData('text/plain', String(idx));
+      e.dataTransfer.setData('application/floqt-reorder-idx', String(idx));
     } catch {}
   };
 
@@ -239,11 +258,18 @@ export function MuralPage() {
 
   const handleDrop = async (toIdx: number, e: React.DragEvent) => {
     e.preventDefault();
-    if (draggingIdx === null || draggingIdx === toIdx) {
+    e.stopPropagation();
+    const rawIdx =
+      e.dataTransfer.getData('application/floqt-reorder-idx') ||
+      e.dataTransfer.getData('text/plain');
+    const fromIdx =
+      draggingIdx !== null ? draggingIdx : parseInt(rawIdx, 10);
+
+    if (isNaN(fromIdx) || fromIdx === toIdx) {
       setDraggingIdx(null);
       return;
     }
-    await moveHighlight(draggingIdx, toIdx);
+    await moveHighlight(fromIdx, toIdx);
     setDraggingIdx(null);
   };
 
@@ -422,11 +448,12 @@ export function MuralPage() {
               <select
                 value={sortBy}
                 onChange={(e) =>
-                  setSortBy(e.target.value as 'recent' | 'oldest' | 'book')
+                  setSortBy(e.target.value as 'custom' | 'recent' | 'oldest' | 'book')
                 }
                 aria-label="Ordenar mural"
                 className="text-xs bg-surface border border-border text-ink rounded-lg px-2.5 py-1.5 outline-none focus:border-accent cursor-pointer"
               >
+                <option value="custom">Ordem personalizada</option>
                 <option value="recent">Mais recentes</option>
                 <option value="oldest">Mais antigas</option>
                 <option value="book">Por livro (A-Z)</option>

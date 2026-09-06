@@ -10,6 +10,7 @@ export interface CreateBookInput {
   year?: number | null;
   tags?: string[];
   coverId?: string | null;
+  folderId?: string | null;
 }
 
 export interface UpdateBookInput {
@@ -19,6 +20,7 @@ export interface UpdateBookInput {
   year?: number | null;
   tags?: string[];
   coverId?: string | null;
+  folderId?: string | null;
 }
 
 export async function getBooks(): Promise<Book[]> {
@@ -39,6 +41,7 @@ export async function createBook(input: CreateBookInput): Promise<Book> {
     year: input.year ? Number(input.year) : null,
     tags: input.tags ? input.tags.map((t) => t.trim()).filter(Boolean) : [],
     coverId: input.coverId ?? null,
+    folderId: input.folderId ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -63,6 +66,7 @@ export async function updateBook(id: string, updates: UpdateBookInput): Promise<
     year: updates.year !== undefined ? (updates.year ? Number(updates.year) : null) : existing.year,
     tags: updates.tags !== undefined ? updates.tags.map((t) => t.trim()).filter(Boolean) : existing.tags,
     coverId: updates.coverId !== undefined ? updates.coverId : existing.coverId,
+    folderId: updates.folderId !== undefined ? updates.folderId : existing.folderId,
     updatedAt: now,
   };
 

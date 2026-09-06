@@ -1,3 +1,15 @@
+export interface Folder {
+  id: string;
+  name: string;
+  parentId: string | null; // null for root level, folderId for subfolders
+  color: string; // Hex color code (e.g., #FF6B6B, #FFA94D)
+  bookId?: string | null; // null for library/shelf folders, or bookId for folders within a book
+  type?: 'book' | 'highlight'; // 'book' (default) or 'highlight'
+  order?: number;
+  createdAt: string; // ISO8601
+  updatedAt: string; // ISO8601
+}
+
 export interface Book {
   id: string;
   title: string;
@@ -6,6 +18,7 @@ export interface Book {
   year: number | null;
   tags: string[];
   coverId: string | null;
+  folderId?: string | null; // null or undefined for root shelf
   createdAt: string; // ISO8601
   updatedAt: string; // ISO8601
 }
@@ -13,6 +26,7 @@ export interface Book {
 export interface Highlight {
   id: string;
   bookId: string;
+  folderId?: string | null; // null or undefined for root book highlights
   text: string;
   page: number | null;
   comment: string | null;
@@ -54,6 +68,7 @@ export interface ExportBookData extends Omit<Book, 'coverId'> {
 export interface ExportData {
   version: string;
   exportedAt: string;
+  folders?: Folder[];
   books: ExportBookData[];
   highlights: Highlight[];
   settings?: AppSettings;
@@ -72,6 +87,7 @@ export interface BookConflict {
 export interface ImportPreviewData {
   totalBooks: number;
   totalHighlights: number;
+  folders?: Folder[];
   newBooks: ExportBookData[];
   newHighlights: Highlight[];
   conflicts: BookConflict[];
@@ -84,3 +100,4 @@ export interface ToastMessage {
   message: string;
   duration?: number;
 }
+

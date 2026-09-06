@@ -1,19 +1,26 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useBook } from '../hooks/useBooks';
+import { useFolder, useHighlightFolders } from '../hooks/useFolders';
 import { useHighlights } from '../hooks/useHighlights';
 import { useCoverImage } from '../hooks/useCoverImage';
 import { deleteBook } from '../services/bookService';
 import { deleteHighlight, reorderHighlights } from '../services/highlightService';
+import { deleteFolder, moveHighlightToFolder } from '../services/folderService';
 import { CoverPlaceholder } from '../components/shelf/CoverPlaceholder';
 import { HighlightCard } from '../components/highlights/HighlightCard';
 import { HighlightFormModal } from '../components/highlights/HighlightFormModal';
 import { HighlightExpandedModal } from '../components/highlights/HighlightExpandedModal';
 import { ConfirmModal } from '../components/common/ConfirmModal';
+import { MoveBookModal } from '../components/folders/MoveBookModal';
+import { MoveHighlightModal } from '../components/folders/MoveHighlightModal';
+import { FolderModal } from '../components/folders/FolderModal';
+import { FolderBreadcrumb } from '../components/folders/FolderBreadcrumb';
+import { FolderCard } from '../components/folders/FolderCard';
 import { EmptyState } from '../components/common/EmptyState';
 import { Button } from '../components/common/Button';
 import { useToastStore } from '../store/useToastStore';
-import { Highlight } from '../types';
+import { Highlight, Folder } from '../types';
 import {
   ArrowLeft,
   Edit,
@@ -27,6 +34,9 @@ import {
   Tag as TagIcon,
   GripVertical,
   Check,
+  Folder as FolderIcon,
+  FolderInput,
+  FolderPlus,
 } from 'lucide-react';
 
 export function BookDetailPage() {
@@ -35,8 +45,26 @@ export function BookDetailPage() {
   const { addToast } = useToastStore();
 
   const { book, isLoading: isLoadingBook } = useBook(id);
+  const { folder } = useFolder(book?.folderId);
   const { highlights } = useHighlights(id);
   const { coverUrl } = useCoverImage(book?.coverId);
+
+  // Highlight Folders state
+  const {
+    folders: hlFolders,
+    highlightFolderCounts,
+    getBreadcrumbs: getHlBreadcrumbs,
+    getSubfolders: getHlSubfolders,
+  } = useHighlightFolders(book?.id);
+
+  const [currentHlFolderId, setCurrentHlFolderId] = useState<string | null>(null);
+
+  // Highlight Folder Modals
+  const [isHlFolderModalOpen, setIsHlFolderModalOpen] = useState(false);
+  const [hlFolderToEdit, setHlFolderToEdit] = useState<Folder | null>(null);
+  const [defaultHlParentId, setDefaultHlParentId] = useState<string | null>(null);
+  const [hlFolderToDelete, setHlFolderToDelete] = useState<Folder | null>(null);
+  const [isDeletingHlFolder, setIsDeletingHlFolder] = useState(false);
 
   // Search inside this book's highlights
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,15 +74,11 @@ export function BookDetailPage() {
   const [reorderedList, setReorderedList] = useState<Highlight[]>([]);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!isReorderMode) {
-      setReorderedList(highlights);
-    }
-  }, [highlights, isReorderMode]);
-
   // Modals state
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [highlightToEdit, setHighlightToEdit] = useState<Highlight | null>(null);
+  const [isMoveFolderOpen, setIsMoveFolderOpen] = useState(false);
+  const [highlightToMove, setHighlightToMove] = useState<Highlight | null>(null);
 
   const [expandedHighlight, setExpandedHighlight] = useState<Highlight | null>(null);
 
@@ -62,18 +86,50 @@ export function BookDetailPage() {
   const [isDeleteBookOpen, setIsDeleteBookOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Filter highlights
+  const currentHlFolder = useMemo(
+    () => hlFolders.find((f) => f.id === currentHlFolderId) || null,
+    [hlFolders, currentHlFolderId]
+  );
+
+  const hlBreadcrumbs = useMemo(
+    () => getHlBreadcrumbs(currentHlFolderId),
+    [getHlBreadcrumbs, currentHlFolderId]
+  );
+
+  const currentHlSubfolders = useMemo(
+    () => getHlSubfolders(currentHlFolderId),
+    [getHlSubfolders, currentHlFolderId]
+  );
+
+  const isSearchingHighlights = Boolean(searchQuery.trim());
+
+  // Filter highlights by active highlight folder (unless searching)
   const filteredHighlights = useMemo(() => {
-    if (!searchQuery.trim()) return highlights;
-    const q = searchQuery.trim().toLowerCase();
-    return highlights.filter(
-      (h) =>
-        h.text.toLowerCase().includes(q) ||
-        (h.comment && h.comment.toLowerCase().includes(q)) ||
-        (h.tags && h.tags.some((t) => t.toLowerCase().includes(q))) ||
-        (h.page && h.page.toString().includes(q))
-    );
-  }, [highlights, searchQuery]);
+    let result = [...highlights];
+
+    if (!isSearchingHighlights) {
+      result = result.filter((h) => (h.folderId || null) === currentHlFolderId);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(
+        (h) =>
+          h.text.toLowerCase().includes(q) ||
+          (h.comment && h.comment.toLowerCase().includes(q)) ||
+          (h.tags && h.tags.some((t) => t.toLowerCase().includes(q))) ||
+          (h.page && h.page.toString().includes(q))
+      );
+    }
+
+    return result;
+  }, [highlights, searchQuery, currentHlFolderId, isSearchingHighlights]);
+
+  useEffect(() => {
+    if (!isReorderMode) {
+      setReorderedList(filteredHighlights);
+    }
+  }, [filteredHighlights, isReorderMode]);
 
   if (isLoadingBook) {
     return <div className="p-12 text-center text-ink-muted">Carregando livro...</div>;
@@ -134,6 +190,47 @@ export function BookDetailPage() {
     }
   };
 
+  const handleDeleteHlFolder = async () => {
+    if (!hlFolderToDelete) return;
+    try {
+      setIsDeletingHlFolder(true);
+      await deleteFolder(hlFolderToDelete.id);
+      addToast({
+        type: 'success',
+        message: `Pasta "${hlFolderToDelete.name}" excluída. Destaques foram movidos para a raiz do livro.`,
+      });
+      if (currentHlFolderId === hlFolderToDelete.id) {
+        setCurrentHlFolderId(hlFolderToDelete.parentId || null);
+      }
+      setHlFolderToDelete(null);
+    } catch {
+      addToast({
+        type: 'error',
+        message: 'Erro ao excluir a pasta de destaques.',
+      });
+    } finally {
+      setIsDeletingHlFolder(false);
+    }
+  };
+
+  const handleDropHighlightToFolder = async (highlightId: string, targetFolderId: string | null) => {
+    try {
+      await moveHighlightToFolder(highlightId, targetFolderId);
+      const targetFolder = hlFolders.find((f) => f.id === targetFolderId);
+      addToast({
+        type: 'success',
+        message: targetFolder
+          ? `Destaque movido para "${targetFolder.name}".`
+          : 'Destaque movido para a raiz do livro.',
+      });
+    } catch {
+      addToast({
+        type: 'error',
+        message: 'Erro ao mover o destaque.',
+      });
+    }
+  };
+
   const handleToggleReorder = async () => {
     if (isReorderMode) {
       try {
@@ -151,7 +248,7 @@ export function BookDetailPage() {
       }
       setIsReorderMode(false);
     } else {
-      setReorderedList([...highlights]);
+      setReorderedList([...filteredHighlights]);
       setIsReorderMode(true);
       setSearchQuery('');
     }
@@ -213,6 +310,16 @@ export function BookDetailPage() {
           <Button
             variant="secondary"
             size="sm"
+            onClick={() => setIsMoveFolderOpen(true)}
+            leftIcon={<FolderInput className="w-3.5 h-3.5 text-accent" />}
+            className="text-xs min-h-[36px]"
+          >
+            Mover Pasta
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => navigate(`/books/${book.id}/edit`)}
             leftIcon={<Edit className="w-3.5 h-3.5" />}
             className="text-xs min-h-[36px]"
@@ -261,6 +368,20 @@ export function BookDetailPage() {
 
           {/* Meta Badges */}
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-4 text-xs text-ink-muted">
+            {/* Folder Badge */}
+            <button
+              type="button"
+              onClick={() => setIsMoveFolderOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-bg border border-border hover:border-accent/40 text-ink transition-colors cursor-pointer"
+              title="Clique para mover o livro de pasta"
+            >
+              <div
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: folder?.color || '#868E96' }}
+              />
+              <span className="font-medium">{folder ? folder.name : 'Início da Estante'}</span>
+            </button>
+
             {book.genre && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-bg border border-border text-ink">
                 <Bookmark className="w-3 h-3 text-accent" />
@@ -299,19 +420,19 @@ export function BookDetailPage() {
       </div>
 
       {/* Highlights Section */}
-      <div className="flex flex-col space-y-4">
+      <div className="flex flex-col space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-serif font-bold text-ink">
               Destaques Literários
             </h2>
             <span className="text-xs bg-bg border border-border px-2 py-0.5 rounded-full text-ink-muted">
-              {displayList.length}
+              {filteredHighlights.length}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            {highlights.length >= 2 && (
+            {filteredHighlights.length >= 2 && (
               <Button
                 variant={isReorderMode ? 'primary' : 'secondary'}
                 size="sm"
@@ -324,7 +445,7 @@ export function BookDetailPage() {
                   )
                 }
               >
-                {isReorderMode ? 'Concluir Ordem' : 'Reordenar Destaques'}
+                {isReorderMode ? 'Concluir Ordem' : 'Reordenar'}
               </Button>
             )}
 
@@ -344,6 +465,73 @@ export function BookDetailPage() {
           </div>
         </div>
 
+        {/* Highlight Folders Breadcrumb */}
+        {(hlFolders.length > 0 || currentHlFolderId) && (
+          <FolderBreadcrumb
+            breadcrumbs={hlBreadcrumbs}
+            currentFolder={currentHlFolder}
+            onNavigate={(folderId) => setCurrentHlFolderId(folderId)}
+            onDropToFolder={(hlId, targetFolderId) => handleDropHighlightToFolder(hlId, targetFolderId)}
+            onNewFolder={() => {
+              setHlFolderToEdit(null);
+              setDefaultHlParentId(null);
+              setIsHlFolderModalOpen(true);
+            }}
+            onNewSubfolder={() => {
+              setHlFolderToEdit(null);
+              setDefaultHlParentId(currentHlFolderId);
+              setIsHlFolderModalOpen(true);
+            }}
+          />
+        )}
+
+        {/* Highlight Folders/Subfolders Grid */}
+        {!isSearchingHighlights && currentHlSubfolders.length > 0 && (
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FolderIcon className="w-3.5 h-3.5 text-accent" />
+                <span className="text-xs font-serif font-bold text-ink">
+                  {currentHlFolder ? 'Subpastas de Destaques' : 'Pastas de Destaques'}
+                </span>
+                <span className="text-[10px] bg-bg border border-border px-1.5 py-0.2 rounded-full text-ink-muted">
+                  {currentHlSubfolders.length}
+                </span>
+              </div>
+              <p className="text-[11px] text-ink-muted hidden sm:block">
+                Arraste um destaque para soltá-lo na pasta desejada.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {currentHlSubfolders.map((folder) => {
+                const counts = highlightFolderCounts.get(folder.id) || { highlightCount: 0, subfolderCount: 0 };
+                return (
+                  <FolderCard
+                    key={folder.id}
+                    folder={folder}
+                    itemCount={counts.highlightCount}
+                    subfolderCount={counts.subfolderCount}
+                    itemLabel="destaque"
+                    onClick={() => setCurrentHlFolderId(folder.id)}
+                    onDropHighlight={(hlId, f) => handleDropHighlightToFolder(hlId, f.id)}
+                    onEdit={(f) => {
+                      setHlFolderToEdit(f);
+                      setIsHlFolderModalOpen(true);
+                    }}
+                    onDelete={(f) => setHlFolderToDelete(f)}
+                    onAddSubfolder={(f) => {
+                      setHlFolderToEdit(null);
+                      setDefaultHlParentId(f.id);
+                      setIsHlFolderModalOpen(true);
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Reorder Mode Helper Banner */}
         {isReorderMode && (
           <div className="p-3.5 bg-accent/10 border border-accent/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-ink animate-in fade-in">
@@ -361,7 +549,7 @@ export function BookDetailPage() {
           </div>
         )}
 
-        {/* Search within highlights if more than 2 highlights and not in reorder mode */}
+        {/* Search within highlights */}
         {!isReorderMode && highlights.length > 2 && (
           <div className="relative w-full">
             <Search className="w-4 h-4 text-ink-muted absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -386,12 +574,12 @@ export function BookDetailPage() {
         )}
 
         {/* Highlights List or Empty State */}
-        {highlights.length === 0 ? (
+        {highlights.length === 0 && hlFolders.length === 0 ? (
           <div className="p-8 bg-surface border border-border rounded-xl">
             <EmptyState
               icon={<Quote className="w-8 h-8" />}
               title="Nenhum destaque ainda"
-              description="Adicione frases, trechos marcantes ou reflexões que chamaram sua atenção neste livro."
+              description="Adicione frases, trechos marcantes ou crie pastas para organizar as anotações deste livro."
               actionLabel="Adicionar primeiro destaque"
               onAction={() => {
                 setHighlightToEdit(null);
@@ -400,16 +588,51 @@ export function BookDetailPage() {
             />
           </div>
         ) : displayList.length === 0 ? (
-          <div className="p-8 bg-surface border border-border rounded-xl text-center">
-            <p className="text-sm text-ink-muted">Nenhum trecho encontrado com "{searchQuery}".</p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-3"
-              onClick={() => setSearchQuery('')}
-            >
-              Limpar busca
-            </Button>
+          <div className="p-8 bg-surface border border-border rounded-xl text-center space-y-3">
+            <p className="text-sm text-ink-muted">
+              {isSearchingHighlights
+                ? `Nenhum trecho encontrado com "${searchQuery}".`
+                : currentHlFolder
+                ? `Nenhum destaque direto na pasta "${currentHlFolder.name}".`
+                : 'Nenhum destaque encontrado nesta visualização.'}
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              {isSearchingHighlights ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSearchQuery('')}
+                >
+                  Limpar busca
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => {
+                      setHighlightToEdit(null);
+                      setIsFormOpen(true);
+                    }}
+                    leftIcon={<Plus className="w-3.5 h-3.5" />}
+                  >
+                    Novo Destaque
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setHlFolderToEdit(null);
+                      setDefaultHlParentId(currentHlFolderId);
+                      setIsHlFolderModalOpen(true);
+                    }}
+                    leftIcon={<FolderPlus className="w-3.5 h-3.5" />}
+                  >
+                    {currentHlFolder ? 'Nova Subpasta' : 'Nova Pasta de Destaques'}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -434,6 +657,7 @@ export function BookDetailPage() {
                   setIsFormOpen(true);
                 }}
                 onDelete={(h) => setHighlightToDelete(h)}
+                onMoveFolder={(h) => setHighlightToMove(h)}
               />
             ))}
           </div>
@@ -445,6 +669,7 @@ export function BookDetailPage() {
         isOpen={isFormOpen}
         bookId={book.id}
         highlightToEdit={highlightToEdit}
+        defaultFolderId={currentHlFolderId}
         onClose={() => {
           setIsFormOpen(false);
           setHighlightToEdit(null);
@@ -489,6 +714,47 @@ export function BookDetailPage() {
         confirmLabel="Excluir Livro"
         isDestructive={true}
         isLoading={isDeleting}
+      />
+
+      {/* Move Book Modal */}
+      <MoveBookModal
+        isOpen={isMoveFolderOpen}
+        book={book}
+        onClose={() => setIsMoveFolderOpen(false)}
+      />
+
+      {/* Move Highlight Modal */}
+      <MoveHighlightModal
+        isOpen={Boolean(highlightToMove)}
+        highlight={highlightToMove}
+        bookId={book.id}
+        onClose={() => setHighlightToMove(null)}
+      />
+
+      {/* Highlight Folder Create/Edit Modal */}
+      <FolderModal
+        isOpen={isHlFolderModalOpen}
+        folderToEdit={hlFolderToEdit}
+        defaultParentId={defaultHlParentId}
+        bookId={book.id}
+        type="highlight"
+        onClose={() => {
+          setIsHlFolderModalOpen(false);
+          setHlFolderToEdit(null);
+          setDefaultHlParentId(null);
+        }}
+      />
+
+      {/* Delete Highlight Folder Modal */}
+      <ConfirmModal
+        isOpen={Boolean(hlFolderToDelete)}
+        onClose={() => setHlFolderToDelete(null)}
+        onConfirm={handleDeleteHlFolder}
+        title={`Excluir pasta de destaques "${hlFolderToDelete?.name}"?`}
+        message="Deseja realmente excluir esta pasta? Todas as subpastas serão excluídas, e os destaques serão mantidos na raiz do livro."
+        confirmLabel="Excluir Pasta"
+        isDestructive={true}
+        isLoading={isDeletingHlFolder}
       />
     </div>
   );

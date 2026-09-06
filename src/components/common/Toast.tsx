@@ -31,7 +31,7 @@ export function ToastContainer() {
             role="status"
             className={`pointer-events-auto flex items-center justify-between gap-3 p-4 bg-surface text-ink rounded-xl shadow-2xl border ${
               borderColors[toast.type]
-            } animate-in fade-in slide-in-from-bottom-3 duration-200`}
+            } animate-spring-pop`}
           >
             <div className="flex items-center gap-3">
               {icons[toast.type]}

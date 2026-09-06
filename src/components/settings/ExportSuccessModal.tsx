@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
-import { Download, Copy, Check, FileArchive, FileJson, CheckCircle2 } from 'lucide-react';
+import { Copy, Check, FileArchive, FileJson, CheckCircle2, FolderDown } from 'lucide-react';
 import { useToastStore } from '../../store/useToastStore';
-import { ExportResult } from '../../services/exportService';
+import { ExportResult, saveExportFile } from '../../services/exportService';
 
 export interface ExportSuccessModalProps {
   isOpen: boolean;
@@ -18,8 +18,29 @@ export function ExportSuccessModal({
 }: ExportSuccessModalProps) {
   const { addToast } = useToastStore();
   const [copied, setCopied] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!exportResult) return null;
+
+  const handleSaveToFolder = async () => {
+    try {
+      setIsSaving(true);
+      const saved = await saveExportFile(exportResult);
+      if (saved) {
+        addToast({
+          type: 'success',
+          message: 'Arquivo de backup salvo com sucesso!',
+        });
+      }
+    } catch {
+      addToast({
+        type: 'error',
+        message: 'Erro ao salvar o arquivo.',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleCopyJson = async () => {
     try {
@@ -55,23 +76,23 @@ export function ExportSuccessModal({
               {exportResult.highlightCount} {exportResult.highlightCount === 1 ? 'destaque' : 'destaques'}
             </p>
             <p className="text-ink-muted">
-              {exportResult.savedViaPicker
-                ? 'Arquivo salvo na pasta escolhida.'
-                : 'Se o download não iniciou automaticamente, use os botões abaixo.'}
+              Clique no botão abaixo para escolher a pasta onde deseja salvar seu arquivo compactado (.zip).
             </p>
           </div>
         </div>
 
-        {/* Primary Download Button */}
+        {/* Primary Download & Choose Folder Button */}
         <div className="flex flex-col gap-3">
-          <a
-            href={exportResult.downloadUrl}
-            download={exportResult.filename}
-            className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-accent hover:bg-accent-hover text-white text-sm font-semibold rounded-lg shadow-sm transition-all text-center min-h-[44px]"
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={handleSaveToFolder}
+            isLoading={isSaving}
+            leftIcon={<FolderDown className="w-5 h-5" />}
+            className="w-full py-3.5 text-sm font-semibold shadow-md"
           >
-            <Download className="w-5 h-5" />
-            <span>Baixar Arquivo ({exportResult.filename})</span>
-          </a>
+            Baixar e escolher a pasta que quer colocar ({exportResult.filename})
+          </Button>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Button
@@ -97,10 +118,10 @@ export function ExportSuccessModal({
         <div className="p-3 bg-bg/60 border border-border rounded-lg text-[11px] text-ink-muted space-y-1">
           <p className="font-semibold text-ink flex items-center gap-1">
             <FileArchive className="w-3.5 h-3.5 text-accent" />
-            Onde fica o arquivo?
+            Como funciona a exportação?
           </p>
           <p>
-            O arquivo é salvo na pasta de <strong>Downloads</strong> do seu computador. Ao importar futuramente, basta selecionar este arquivo <code>{exportResult.filename}</code>.
+            Ao clicar em <strong>Baixar e escolher a pasta</strong>, abrirá a janela do seu sistema para você salvar o arquivo <code>{exportResult.filename}</code> na pasta que preferir (como Downloads, Documentos ou Pen Drive).
           </p>
         </div>
 

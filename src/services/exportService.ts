@@ -23,9 +23,10 @@ export async function prepareExportData(): Promise<{
   filename: string;
   jsonString: string;
 }> {
-  const [books, highlights, settings] = await Promise.all([
+  const [books, highlights, folders, settings] = await Promise.all([
     db.books.toArray(),
     db.highlights.toArray(),
+    db.folders.toArray(),
     db.settings.get('singleton'),
   ]);
 
@@ -67,6 +68,7 @@ export async function prepareExportData(): Promise<{
   const exportPayload: ExportData = {
     version: '1.0',
     exportedAt: new Date().toISOString(),
+    folders,
     books: booksForExport,
     highlights,
     settings,
@@ -102,9 +104,25 @@ export async function exportLibrary(): Promise<ExportResult> {
   const { exportPayload, books, highlights, zipBlob, filename, jsonString } =
     await prepareExportData();
 
-  let savedViaPicker = false;
+  const downloadUrl = URL.createObjectURL(zipBlob);
+  await updateLastExportAt(exportPayload.exportedAt);
 
-  // 1. Try modern File System Access API (Native Windows "Save As..." dialog)
+  return {
+    success: true,
+    bookCount: books.length,
+    highlightCount: highlights.length,
+    zipBlob,
+    downloadUrl,
+    filename,
+    jsonString,
+    savedViaPicker: false,
+  };
+}
+
+export async function saveExportFile(exportResult: ExportResult): Promise<boolean> {
+  const { zipBlob, filename, downloadUrl } = exportResult;
+
+  // 1. Try modern File System Access API (User chooses folder directly)
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
       const handle = await (window as any).showSaveFilePicker({
@@ -122,60 +140,33 @@ export async function exportLibrary(): Promise<ExportResult> {
       const writable = await handle.createWritable();
       await writable.write(zipBlob);
       await writable.close();
-      savedViaPicker = true;
+      return true;
     } catch (err: any) {
       if (err?.name === 'AbortError') {
-        // User cancelled native dialog, don't fallback to programmatic click
-        const downloadUrl = URL.createObjectURL(zipBlob);
-        return {
-          success: true,
-          bookCount: books.length,
-          highlightCount: highlights.length,
-          zipBlob,
-          downloadUrl,
-          filename,
-          jsonString,
-          savedViaPicker: false,
-        };
+        // User cancelled directory picker
+        return false;
       }
-      // Otherwise proceed to programmatic fallback
+      // Fallback if failed
     }
   }
 
-  // 2. Programmatic fallback link
-  const downloadUrl = URL.createObjectURL(zipBlob);
+  // 2. Standard browser download fallback
+  try {
+    const link = document.createElement('a');
+    link.style.display = 'none';
+    link.href = downloadUrl;
+    link.download = filename;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
 
-  if (!savedViaPicker) {
-    try {
-      const link = document.createElement('a');
-      link.style.display = 'none';
-      link.href = downloadUrl;
-      link.download = filename;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-
-      setTimeout(() => {
-        if (document.body.contains(link)) {
-          document.body.removeChild(link);
-        }
-      }, 1000);
-    } catch {
-      // Ignored if blocked
-    }
+    setTimeout(() => {
+      if (document.body.contains(link)) {
+        document.body.removeChild(link);
+      }
+    }, 1000);
+    return true;
+  } catch {
+    return false;
   }
-
-  // Update lastExportAt
-  await updateLastExportAt(exportPayload.exportedAt);
-
-  return {
-    success: true,
-    bookCount: books.length,
-    highlightCount: highlights.length,
-    zipBlob,
-    downloadUrl,
-    filename,
-    jsonString,
-    savedViaPicker,
-  };
 }

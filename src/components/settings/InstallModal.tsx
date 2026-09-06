@@ -11,6 +11,9 @@ import {
   PlusSquare,
   CheckCircle2,
   Sparkles,
+  Zap,
+  Monitor,
+  ShieldCheck,
 } from 'lucide-react';
 import { usePwaInstall } from '../../hooks/usePwaInstall';
 
@@ -233,15 +236,24 @@ export function InstallModal({ isOpen, onClose }: InstallModalProps) {
         {/* Benefits reminder */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
           <div className="p-3 bg-surface border border-border rounded-lg space-y-1">
-            <p className="font-semibold text-ink">⚡ 100% Offline</p>
+            <p className="font-semibold text-ink flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-accent" />
+              <span>100% Offline</span>
+            </p>
             <p className="text-ink-muted text-[11px]">Acesse sua estante e crie destaques mesmo sem internet.</p>
           </div>
           <div className="p-3 bg-surface border border-border rounded-lg space-y-1">
-            <p className="font-semibold text-ink">🖥️ Tela Cheia</p>
+            <p className="font-semibold text-ink flex items-center gap-1.5">
+              <Monitor className="w-3.5 h-3.5 text-accent" />
+              <span>Tela Cheia</span>
+            </p>
             <p className="text-ink-muted text-[11px]">Experiência limpa sem barras de navegação ou abas.</p>
           </div>
           <div className="p-3 bg-surface border border-border rounded-lg space-y-1">
-            <p className="font-semibold text-ink">🔒 Dados Locais</p>
+            <p className="font-semibold text-ink flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-accent" />
+              <span>Dados Locais</span>
+            </p>
             <p className="text-ink-muted text-[11px]">Tudo armazenado de forma privada no seu dispositivo.</p>
           </div>
         </div>

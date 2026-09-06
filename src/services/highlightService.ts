@@ -4,6 +4,7 @@ import { generateId } from '../utils/id';
 
 export interface CreateHighlightInput {
   bookId: string;
+  folderId?: string | null;
   text: string;
   page?: number | null;
   comment?: string | null;
@@ -11,6 +12,7 @@ export interface CreateHighlightInput {
 }
 
 export interface UpdateHighlightInput {
+  folderId?: string | null;
   text?: string;
   page?: number | null;
   comment?: string | null;
@@ -38,6 +40,7 @@ export async function createHighlight(input: CreateHighlightInput): Promise<High
   const highlight: Highlight = {
     id: generateId(),
     bookId: input.bookId,
+    folderId: input.folderId || null,
     text: input.text.trim(),
     page: input.page ? Number(input.page) : null,
     comment: input.comment ? input.comment.trim() : null,
@@ -63,6 +66,7 @@ export async function updateHighlight(
   const updatedHighlight: Highlight = {
     ...existing,
     ...updates,
+    folderId: updates.folderId !== undefined ? updates.folderId : existing.folderId,
     text: updates.text !== undefined ? updates.text.trim() : existing.text,
     page: updates.page !== undefined ? (updates.page ? Number(updates.page) : null) : existing.page,
     comment: updates.comment !== undefined ? (updates.comment ? updates.comment.trim() : null) : existing.comment,
